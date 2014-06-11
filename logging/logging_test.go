@@ -26,6 +26,8 @@ func TestLoggingHandler(t *testing.T) {
 	out := bytes.NewBuffer(nil)
 	logger := Wrap(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/greeting")
+			w.WriteHeader(200)
 			fmt.Fprint(w, "Hello, world!")
 		}),
 		out,
@@ -36,7 +38,15 @@ func TestLoggingHandler(t *testing.T) {
 	server := httptest.NewServer(logger)
 	defer server.Close()
 
-	resp, err := http.Get(server.URL)
+	req, err := http.NewRequest("GET", server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("User-Agent", "gotest")
+	req.Header.Set("X-Request-Id", "req12345")
+	req.Header.Set("X-Forwarded-For", "203.0.113.1")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,8 +65,8 @@ func TestLoggingHandler(t *testing.T) {
 	logger.Stop()
 
 	actual = out.String()
-	expected = `127.0.0.1 - - [03/Jun/2014:16:45:22 +0000] "GET / HTTP/1.1" 200 0 "-" "Go 1.1 package http" 1007` + "\n"
+	expected = `203.0.113.1 - - [03/Jun/2014:16:45:22 +0000] "GET / HTTP/1.1" 200 0 "-" "gotest" 1007 "req12345"` + "\n"
 	if actual != expected {
-		t.Errorf("Log output was `%s`, but expected `%s`", actual, expected)
+		t.Errorf("Log output was \n`%s`\n, but expected \n`%s`", actual, expected)
 	}
 }

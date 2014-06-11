@@ -61,17 +61,23 @@ func (al *LoggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if index := strings.LastIndex(remoteAddr, ":"); index != -1 {
 		remoteAddr = remoteAddr[:index]
 	}
+
+	if s := r.Header.Get(xForwardedFor); s != "" {
+		remoteAddr = s
+	}
+
 	referer := r.Referer()
 	if "" == referer {
 		referer = "-"
 	}
+
 	userAgent := r.UserAgent()
 	if "" == userAgent {
 		userAgent = "-"
 	}
 
 	al.buffer <- fmt.Sprintf(
-		"%s %s %s [%v] \"%s %s %s\" %d %d \"%s\" \"%s\" %d\n",
+		"%s %s %s [%s] \"%s %s %s\" %d %d %q %q %d %q\n",
 		remoteAddr,
 		"-", // We're not supporting identd, sorry.
 		"-", // We're also not supporting basic auth.
@@ -84,11 +90,14 @@ func (al *LoggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		referer,
 		userAgent,
 		end.Sub(start).Nanoseconds()/int64(time.Millisecond),
+		r.Header.Get(xRequestID),
 	)
 }
 
 const (
-	apacheFormat = "02/Jan/2006:15:04:05 -0700"
+	apacheFormat  = "02/Jan/2006:15:04:05 -0700"
+	xRequestID    = "X-Request-Id"
+	xForwardedFor = "X-Forwarded-For"
 )
 
 type responseWrapper struct {
