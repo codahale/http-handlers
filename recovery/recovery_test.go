@@ -1,23 +1,22 @@
 package recovery
 
 import (
-	"bytes"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
 
 func TestRecoveryHandler(t *testing.T) {
-	out := bytes.NewBuffer(nil)
-	l := log.New(out, "", log.LstdFlags)
+	tmp := Swap(os.Stderr)
+	defer tmp.Restore(os.Stderr)
+
 	recovery := Wrap(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			panic("aaaaugh")
 		}),
-		l,
 	)
 
 	server := httptest.NewServer(recovery)
@@ -38,9 +37,46 @@ func TestRecoveryHandler(t *testing.T) {
 		t.Errorf("Unexpected response: %#v", actual)
 	}
 
-	actual = out.String()
+	b, err = tmp.ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	actual = string(b)
 	t.Log("\n" + actual)
 	if !strings.Contains(actual, "aaaaugh") {
 		t.Errorf("Unexpected error output: %#v", actual)
 	}
+}
+
+// extract this out into a reusable lib
+
+type TmpFile struct {
+	original os.File
+	redir    *os.File
+}
+
+func Swap(f *os.File) *TmpFile {
+	redir, err := ioutil.TempFile(os.TempDir(), "tmpfile")
+	if err != nil {
+		panic(err)
+	}
+	tmpFile := TmpFile{
+		original: *f,
+		redir:    redir,
+	}
+	*f = *redir
+	return &tmpFile
+}
+
+func (tmp TmpFile) ReadAll() ([]byte, error) {
+	if _, err := tmp.redir.Seek(0, 0); err != nil {
+		return nil, err
+	}
+	return ioutil.ReadAll(tmp.redir)
+
+}
+
+func (tmp TmpFile) Restore(f *os.File) {
+	*f = tmp.original
 }

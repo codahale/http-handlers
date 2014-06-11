@@ -15,16 +15,12 @@ import (
 // Wrap returns an handler which proxies requests to the given handler, but
 // handles panics by logging the stack trace and returning a 500 Internal Server
 // Error to the client, if possible.
-func Wrap(h http.Handler, l *log.Logger) http.Handler {
-	return &recoveryHandler{
-		h: h,
-		l: l,
-	}
+func Wrap(h http.Handler) http.Handler {
+	return &recoveryHandler{h: h}
 }
 
 type recoveryHandler struct {
 	h http.Handler
-	l *log.Logger
 	r sync.Mutex
 }
 
@@ -44,7 +40,7 @@ func (h *recoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			)
 			http.Error(w, body, http.StatusInternalServerError)
 
-			h.l.Printf("panic=%016x message=%v\n", id, e)
+			log.Printf("panic=%016x message=%v\n", id, e)
 			for skip := 1; ; skip++ {
 				pc, file, line, ok := runtime.Caller(skip)
 				if !ok {
@@ -54,7 +50,7 @@ func (h *recoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				f := runtime.FuncForPC(pc)
-				h.l.Printf("panic=%016x %s:%d %s()\n", id, file, line, f.Name())
+				log.Printf("panic=%016x %s:%d %s()\n", id, file, line, f.Name())
 			}
 		}
 	}()
