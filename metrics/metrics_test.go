@@ -1,16 +1,19 @@
 package metrics
 
 import (
+	"encoding/json"
+	"expvar"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 )
 
 func TestCountingHandler(t *testing.T) {
-	requestCounter.clear()
-	responseCounter.clear()
+	requests = 0
+	responses = 0
 
 	h := Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "hello, world")
@@ -33,21 +36,23 @@ func TestCountingHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	actual := string(b)
-	expected := "hello, world\n"
-	if actual != expected {
-		t.Errorf("Response was %q, but expected %q", actual, expected)
+	a := string(b)
+	e := "hello, world\n"
+	if a != e {
+		t.Errorf("Response was %q, but expected %q", a, e)
 	}
 
-	actual = requestCounter.String()
-	expected = "1"
-	if actual != expected {
-		t.Errorf("Request counter was %q, but expected %s", actual, expected)
+	var actual map[string]uint64
+	if err := json.Unmarshal([]byte(expvar.Get("http").String()), &actual); err != nil {
+		t.Fatal(err)
 	}
 
-	actual = responseCounter.String()
-	expected = "1"
-	if actual != expected {
-		t.Errorf("Response counter was %q, but expected %s", actual, expected)
+	expected := map[string]uint64{
+		"Requests":  1,
+		"Responses": 1,
+	}
+
+	if !reflect.DeepEqual(actual, expected) {
+		t.Errorf("Was %#v, but expected %#v", actual, expected)
 	}
 }
