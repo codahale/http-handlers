@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/pprof"
+	"runtime"
 )
 
 // Wrap returns a handler which adds the following URLs as special cases:
@@ -25,6 +26,7 @@ func Wrap(handler http.Handler) http.Handler {
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/vars", expvarHandler)
+	mux.HandleFunc("/debug/gc", performGC)
 	mux.Handle("/", handler)
 	return mux
 }
@@ -44,4 +46,16 @@ func expvarHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "%q: %s", kv.Key, kv.Value)
 	})
 	fmt.Fprintf(w, "\n}\n")
+}
+
+func performGC(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, "running GC...")
+	runtime.GC()
+	fmt.Fprintln(w, "done!")
 }

@@ -54,6 +54,53 @@ func TestExpVars(t *testing.T) {
 	}
 }
 
+func TestGCPostOnly(t *testing.T) {
+	server := newDebugServer()
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/debug/gc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		io.Copy(ioutil.Discard, resp.Body)
+		resp.Body.Close()
+	}()
+
+	if resp.StatusCode != 405 {
+		t.Errorf("Status code was %d, but expected 405", resp.StatusCode)
+	}
+}
+
+func TestGC(t *testing.T) {
+	server := newDebugServer()
+	defer server.Close()
+
+	resp, err := http.Post(server.URL+"/debug/gc", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		io.Copy(ioutil.Discard, resp.Body)
+		resp.Body.Close()
+	}()
+
+	if resp.StatusCode != 200 {
+		t.Errorf("Status code was %d, but expected 200", resp.StatusCode)
+	}
+
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	actual := string(b)
+	expected := "running GC...done!\n"
+	if actual != expected {
+		t.Errorf("Was %q, but expected %q", actual, expected)
+	}
+}
+
 func get200(t *testing.T, url string) string {
 	resp, err := http.Get(url)
 	if err != nil {
