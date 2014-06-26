@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-func TestCountingHandler(t *testing.T) {
+func TestMetrics(t *testing.T) {
 	requests = 0
 	responses = 0
 
@@ -42,17 +42,45 @@ func TestCountingHandler(t *testing.T) {
 		t.Errorf("Response was %q, but expected %q", a, e)
 	}
 
-	var actual map[string]uint64
+	// jiggle the handle to avoid timing-dependent tests
+	latency.Reset()
+	latency.Insert(1)
+
+	var actual httpStats
 	if err := json.Unmarshal([]byte(expvar.Get("http").String()), &actual); err != nil {
 		t.Fatal(err)
 	}
 
-	expected := map[string]uint64{
-		"Requests":  1,
-		"Responses": 1,
+	expected := httpStats{
+		Requests:  1,
+		Responses: 1,
+		Latency: latencyStats{
+			P50:  1,
+			P75:  1,
+			P90:  1,
+			P95:  1,
+			P99:  1,
+			P999: 1,
+		},
 	}
 
 	if !reflect.DeepEqual(actual, expected) {
 		t.Errorf("Was %#v, but expected %#v", actual, expected)
 	}
+}
+
+func BenchmarkMetrics(b *testing.B) {
+	var (
+		r *http.Request
+		w http.ResponseWriter
+		h = Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	)
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			h.ServeHTTP(w, r)
+		}
+	})
 }
