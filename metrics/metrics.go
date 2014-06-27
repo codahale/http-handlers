@@ -45,16 +45,20 @@ func recordLatency(start time.Time) {
 	latency.Insert(time.Now().Sub(start).Seconds() * 1000.0)
 }
 
+func resetLatency() {
+	latencyMutex.Lock()
+	defer latencyMutex.Unlock()
+
+	latency.Reset()
+}
+
 func init() {
 	latency = quantile.NewTargeted(0.50, 0.75, 0.90, 0.95, 0.99, 0.999)
 
 	go func() {
 		reset := time.NewTicker(1 * time.Minute)
 		for _ = range reset.C {
-			latencyMutex.Lock()
-			defer latencyMutex.Unlock()
-
-			latency.Reset()
+			resetLatency()
 		}
 	}()
 
