@@ -24,17 +24,11 @@ import (
 // at any given point in time.
 func Wrap(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddUint64(&requests, 1)
-		defer atomic.AddUint64(&responses, 1)
+		atomic.AddUint64(&requests, 1)        // inc requests
+		defer atomic.AddUint64(&responses, 1) // inc responses when we're done
+		defer recordLatency(time.Now())       // record latency when we're done
 
-		start := time.Now()
 		h.ServeHTTP(w, r)
-		elapsed := time.Now().Sub(start).Seconds() * 1000.0
-
-		latencyMutex.Lock()
-		defer latencyMutex.Unlock()
-
-		latency.Insert(elapsed)
 	})
 }
 
@@ -43,6 +37,13 @@ var (
 	latency             *quantile.Stream
 	latencyMutex        sync.Mutex
 )
+
+func recordLatency(start time.Time) {
+	latencyMutex.Lock()
+	defer latencyMutex.Unlock()
+
+	latency.Insert(time.Now().Sub(start).Seconds() * 1000.0)
+}
 
 func init() {
 	latency = quantile.NewTargeted(0.50, 0.75, 0.90, 0.95, 0.99, 0.999)
