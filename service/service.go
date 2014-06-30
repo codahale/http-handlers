@@ -19,12 +19,27 @@ import (
 	"github.com/codahale/http-handlers/recovery"
 )
 
-// Wrap returns a new service-ready handler given an application handler.
+// Service is an HTTP service.
+type Service struct {
+	h *logging.LoggingHandler
+}
+
+func (s Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.h.ServeHTTP(w, r)
+}
+
+// Close stops the service.
+func (s Service) Close() error {
+	s.h.Stop()
+	return nil
+}
+
+// New returns a new service-ready handler given an application handler.
 //
 // This stack application-level metrics, debug endpoints, panic recovery, and
 // request logging, in that order.
-func Wrap(h http.Handler) http.Handler {
-	return logging.Wrap(
+func New(h http.Handler) Service {
+	l := logging.Wrap(
 		recovery.Wrap(
 			debug.Wrap(
 				metrics.Wrap(
@@ -34,6 +49,8 @@ func Wrap(h http.Handler) http.Handler {
 		),
 		os.Stdout,
 	)
+	l.Start()
+	return Service{h: l}
 }
 
 func init() {
