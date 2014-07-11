@@ -34,46 +34,58 @@ func Wrap(h http.Handler) http.Handler {
 
 var (
 	requests, responses uint64
-	latency             *quantile.Stream
-	latencyMutex        sync.Mutex
+
+	m       sync.Mutex       // mutex controlling access to the following
+	latency *quantile.Stream // current stream of latency data
+	samples quantile.Samples // past quantum's samples
 )
 
 func recordLatency(start time.Time) {
-	latencyMutex.Lock()
-	defer latencyMutex.Unlock()
+	m.Lock()
+	defer m.Unlock()
 
 	latency.Insert(time.Now().Sub(start).Seconds() * 1000.0)
 }
 
 func resetLatency() {
-	latencyMutex.Lock()
-	defer latencyMutex.Unlock()
+	m.Lock()
+	defer m.Unlock()
 
+	samples = latency.Samples()
 	latency.Reset()
+}
+
+func newStream() *quantile.Stream {
+	return quantile.NewTargeted(0.50, 0.75, 0.90, 0.95, 0.99, 0.999)
 }
 
 func getStats() httpStats {
 	req, res := atomic.LoadUint64(&requests), atomic.LoadUint64(&responses)
 
-	latencyMutex.Lock()
-	defer latencyMutex.Unlock()
+	m.Lock()
+	defer m.Unlock()
+
+	// merge this quantum with the previous quantum
+	s := newStream()
+	s.Merge(latency.Samples())
+	s.Merge(samples)
 
 	return httpStats{
 		Requests:  req,
 		Responses: res,
 		Latency: latencyStats{
-			P50:  latency.Query(0.50),
-			P75:  latency.Query(0.75),
-			P90:  latency.Query(0.90),
-			P95:  latency.Query(0.95),
-			P99:  latency.Query(0.99),
-			P999: latency.Query(0.999),
+			P50:  s.Query(0.50),
+			P75:  s.Query(0.75),
+			P90:  s.Query(0.90),
+			P95:  s.Query(0.95),
+			P99:  s.Query(0.99),
+			P999: s.Query(0.999),
 		},
 	}
 }
 
 func init() {
-	latency = quantile.NewTargeted(0.50, 0.75, 0.90, 0.95, 0.99, 0.999)
+	latency = newStream()
 
 	go func() {
 		reset := time.NewTicker(1 * time.Minute)
