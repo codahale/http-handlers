@@ -10,12 +10,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/bmizerany/perks/quantile"
+	"github.com/codahale/hdrhistogram/hdr"
 )
 
 // Wrap returns a handler which records the number of requests received and
 // responses sent to the given handler, as well as latency quantiles for
-// responses which are reset every minute.
+// responses over a five-minute window.
 //
 // These counters are published as the "http" object in expvars.
 //
@@ -34,29 +34,25 @@ func Wrap(h http.Handler) http.Handler {
 
 var (
 	requests, responses uint64
+	m                   sync.Mutex
 
-	m       sync.Mutex       // mutex controlling access to the following
-	latency *quantile.Stream // current stream of latency data
-	samples quantile.Samples // past quantum's samples
+	// a five-minute window tracking 1ms-3min
+	latency = hdr.NewWindowedHistogram(5, 1, 1000*60*3, 3)
 )
 
 func recordLatency(start time.Time) {
 	m.Lock()
 	defer m.Unlock()
 
-	latency.Insert(time.Now().Sub(start).Seconds() * 1000.0)
+	elapsedMS := time.Now().Sub(start).Seconds() * 1000.0
+	_ = latency.Current.RecordValue(int64(elapsedMS))
 }
 
-func resetLatency() {
+func rotateLatency() {
 	m.Lock()
 	defer m.Unlock()
 
-	samples = latency.Samples()
-	latency.Reset()
-}
-
-func newStream() *quantile.Stream {
-	return quantile.NewTargeted(0.50, 0.75, 0.90, 0.95, 0.99, 0.999)
+	latency.Rotate()
 }
 
 func getStats() httpStats {
@@ -65,32 +61,27 @@ func getStats() httpStats {
 	m.Lock()
 	defer m.Unlock()
 
-	// merge this quantum with the previous quantum
-	s := newStream()
-	s.Merge(latency.Samples())
-	s.Merge(samples)
+	m := latency.Merge()
 
 	return httpStats{
 		Requests:  req,
 		Responses: res,
 		Latency: latencyStats{
-			P50:  s.Query(0.50),
-			P75:  s.Query(0.75),
-			P90:  s.Query(0.90),
-			P95:  s.Query(0.95),
-			P99:  s.Query(0.99),
-			P999: s.Query(0.999),
+			P50:  m.ValueAtQuantile(50),
+			P75:  m.ValueAtQuantile(75),
+			P90:  m.ValueAtQuantile(90),
+			P95:  m.ValueAtQuantile(95),
+			P99:  m.ValueAtQuantile(99),
+			P999: m.ValueAtQuantile(99.9),
 		},
 	}
 }
 
 func init() {
-	latency = newStream()
-
 	go func() {
 		reset := time.NewTicker(1 * time.Minute)
 		for _ = range reset.C {
-			resetLatency()
+			rotateLatency()
 		}
 	}()
 
@@ -105,5 +96,5 @@ type httpStats struct {
 }
 
 type latencyStats struct {
-	P50, P75, P90, P95, P99, P999 float64
+	P50, P75, P90, P95, P99, P999 int64
 }

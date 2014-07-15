@@ -42,10 +42,6 @@ func TestMetrics(t *testing.T) {
 		t.Errorf("Response was %q, but expected %q", a, e)
 	}
 
-	// jiggle the handle to avoid timing-dependent tests
-	latency.Reset()
-	latency.Insert(1)
-
 	var actual httpStats
 	if err := json.Unmarshal([]byte(expvar.Get("http").String()), &actual); err != nil {
 		t.Fatal(err)
@@ -55,12 +51,12 @@ func TestMetrics(t *testing.T) {
 		Requests:  1,
 		Responses: 1,
 		Latency: latencyStats{
-			P50:  1,
-			P75:  1,
-			P90:  1,
-			P95:  1,
-			P99:  1,
-			P999: 1,
+			P50:  0,
+			P75:  0,
+			P90:  0,
+			P95:  0,
+			P99:  0,
+			P999: 0,
 		},
 	}
 
