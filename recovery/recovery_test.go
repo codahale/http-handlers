@@ -17,6 +17,7 @@ func TestRecoveryHandler(t *testing.T) {
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			panic("aaaaugh")
 		}),
+		LogOnPanic,
 	)
 
 	server := httptest.NewServer(recovery)

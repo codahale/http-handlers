@@ -13,16 +13,29 @@ import (
 	"sync"
 )
 
+// PanicHandler is a handler for per-request panics.
+type PanicHandler func(id int64, err interface{}, stacktrace []string)
+
+// LogOnPanic logs the given panic and its stacktrace, prefixing each line with
+// the panic ID.
+func LogOnPanic(id int64, err interface{}, stacktrace []string) {
+	log.Printf("panic=%016x message=%v\n", id, err)
+	for _, line := range stacktrace {
+		log.Printf("panic=%016x %s", id, line)
+	}
+}
+
 // Wrap returns an handler which proxies requests to the given handler, but
 // handles panics by logging the stack trace and returning a 500 Internal Server
 // Error to the client, if possible.
-func Wrap(h http.Handler) http.Handler {
-	return &recoveryHandler{h: h}
+func Wrap(h http.Handler, onPanic PanicHandler) http.Handler {
+	return &recoveryHandler{h: h, p: onPanic}
 }
 
 type recoveryHandler struct {
 	h http.Handler
 	r sync.Mutex
+	p PanicHandler
 }
 
 func (h *recoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -36,14 +49,7 @@ func (h *recoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			id := rand.Int63()
 
-			body := fmt.Sprintf(
-				"%s\n%016x",
-				http.StatusText(http.StatusInternalServerError),
-				id,
-			)
-			http.Error(w, body, http.StatusInternalServerError)
-
-			log.Printf("panic=%016x message=%v\n", id, e)
+			var lines []string
 			for skip := 1; ; skip++ {
 				pc, file, line, ok := runtime.Caller(skip)
 				if !ok {
@@ -53,8 +59,19 @@ func (h *recoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				f := runtime.FuncForPC(pc)
-				log.Printf("panic=%016x %s:%d %s()\n", id, file, line, f.Name())
+				s := fmt.Sprintf("%s:%d %s()\n", file, line, f.Name())
+				lines = append(lines, s)
 			}
+
+			h.p(id, e, lines)
+
+			body := fmt.Sprintf(
+				"%s\n%016x",
+				http.StatusText(http.StatusInternalServerError),
+				id,
+			)
+			http.Error(w, body, http.StatusInternalServerError)
+
 		}
 	}()
 	h.h.ServeHTTP(w, r)

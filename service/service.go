@@ -38,7 +38,7 @@ func (s Service) Close() error {
 //
 // This stack application-level metrics, debug endpoints, panic recovery, and
 // request logging, in that order.
-func New(h http.Handler) Service {
+func New(h http.Handler, onPanic recovery.PanicHandler) Service {
 	l := logging.Wrap(
 		recovery.Wrap(
 			debug.Wrap(
@@ -46,6 +46,7 @@ func New(h http.Handler) Service {
 					h,
 				),
 			),
+			onPanic,
 		),
 		os.Stdout,
 	)
