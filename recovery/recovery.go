@@ -4,13 +4,14 @@
 package recovery
 
 import (
-	"expvar"
 	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
 	"runtime"
 	"sync"
+
+	"github.com/codahale/metrics"
 )
 
 // PanicHandler is a handler for per-request panics.
@@ -42,10 +43,10 @@ func (h *recoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		e := recover()
 		if e != nil {
-			panics.Add(1)
 
 			h.r.Lock()
 			defer h.r.Unlock()
+			panics.Add()
 
 			id := rand.Int63()
 
@@ -77,4 +78,4 @@ func (h *recoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.h.ServeHTTP(w, r)
 }
 
-var panics = expvar.NewInt("panics")
+var panics = metrics.Counter("HTTP.Panics")

@@ -1,21 +1,19 @@
 package metrics
 
 import (
-	"encoding/json"
-	"expvar"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"testing"
+	"time"
+
+	"github.com/codahale/metrics"
 )
 
 func TestMetrics(t *testing.T) {
-	requests = 0
-	responses = 0
-
 	h := Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(100 * time.Millisecond)
 		fmt.Fprintln(w, "hello, world")
 	}))
 	s := httptest.NewServer(h)
@@ -42,26 +40,32 @@ func TestMetrics(t *testing.T) {
 		t.Errorf("Response was %q, but expected %q", a, e)
 	}
 
-	var actual httpStats
-	if err := json.Unmarshal([]byte(expvar.Get("http").String()), &actual); err != nil {
-		t.Fatal(err)
+	counters, gauges := metrics.Snapshot()
+
+	expectedGauges := []string{
+		"HTTP.Latency.P50",
+		"HTTP.Latency.P75",
+		"HTTP.Latency.P90",
+		"HTTP.Latency.P95",
+		"HTTP.Latency.P99",
+		"HTTP.Latency.P999",
 	}
 
-	expected := httpStats{
-		Requests:  1,
-		Responses: 1,
-		Latency: latencyStats{
-			P50:  0,
-			P75:  0,
-			P90:  0,
-			P95:  0,
-			P99:  0,
-			P999: 0,
-		},
+	for _, name := range expectedGauges {
+		if _, ok := gauges[name]; !ok {
+			t.Errorf("Missing gauge %q", name)
+		}
 	}
 
-	if !reflect.DeepEqual(actual, expected) {
-		t.Errorf("Was %#v, but expected %#v", actual, expected)
+	expectedCounters := []string{
+		"HTTP.Requests",
+		"HTTP.Responses",
+	}
+
+	for _, name := range expectedCounters {
+		if _, ok := counters[name]; !ok {
+			t.Errorf("Missing counter %q", name)
+		}
 	}
 }
 
