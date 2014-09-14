@@ -48,7 +48,6 @@ func (al *LoggingHandler) Start() {
 func (al *LoggingHandler) Stop() {
 	close(al.buffer)
 	<-al.quit
-
 }
 
 func (al *LoggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
