@@ -17,7 +17,7 @@ type LoggingHandler struct {
 	w       io.Writer
 	handler http.Handler
 	buffer  chan string
-	quit    chan bool
+	quit    chan struct{}
 }
 
 // Wrap returns the underlying handler, wrapped in a LoggingHandler which will
@@ -29,7 +29,7 @@ func Wrap(h http.Handler, w io.Writer) *LoggingHandler {
 		w:       w,
 		handler: h,
 		buffer:  make(chan string, 1000),
-		quit:    make(chan bool),
+		quit:    make(chan struct{}),
 	}
 }
 
@@ -39,7 +39,7 @@ func (al *LoggingHandler) Start() {
 		for s := range al.buffer {
 			fmt.Fprint(al.w, s)
 		}
-		al.quit <- true
+		close(al.quit)
 	}()
 }
 
