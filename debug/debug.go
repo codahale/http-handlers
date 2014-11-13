@@ -10,6 +10,9 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"runtime"
+	rpprof "runtime/pprof"
+	"strconv"
+	"time"
 )
 
 // Wrap returns a handler which adds the following URLs as special cases:
@@ -25,10 +28,30 @@ func Wrap(handler http.Handler) http.Handler {
 	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/block", blockHandler)
 	mux.HandleFunc("/debug/vars", expvarHandler)
 	mux.HandleFunc("/debug/gc", performGC)
 	mux.Handle("/", handler)
 	return mux
+}
+
+func blockHandler(w http.ResponseWriter, r *http.Request) {
+	debug, _ := strconv.Atoi(r.FormValue("debug"))
+	sec, _ := strconv.ParseInt(r.FormValue("seconds"), 10, 64)
+	if sec == 0 {
+		sec = 30
+	}
+	rate, _ := strconv.Atoi(r.FormValue("rate"))
+	if rate == 0 {
+		rate = 1
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	runtime.SetBlockProfileRate(rate)
+	time.Sleep(time.Duration(sec) * time.Second)
+	runtime.SetBlockProfileRate(0)
+	p := rpprof.Lookup("block")
+	p.WriteTo(w, debug)
 }
 
 // Lifted entirely from expvar.go, which is a shame. This manually generates the
