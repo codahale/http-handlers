@@ -15,11 +15,11 @@ import (
 )
 
 // PanicHandler is a handler for per-request panics.
-type PanicHandler func(id int64, err interface{}, stacktrace []string)
+type PanicHandler func(id int64, err interface{}, stacktrace []string, request *http.Request)
 
 // LogOnPanic logs the given panic and its stacktrace, prefixing each line with
 // the panic ID.
-func LogOnPanic(id int64, err interface{}, stacktrace []string) {
+func LogOnPanic(id int64, err interface{}, stacktrace []string, _ *http.Request) {
 	logMutex.Lock()
 	defer logMutex.Unlock()
 
@@ -64,7 +64,7 @@ func (h *recoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				s := fmt.Sprintf("%s:%d %s()\n", file, line, f.Name())
 				lines = append(lines, s)
 			}
-			h.p(id, e, lines)
+			h.p(id, e, lines, r)
 
 			body := fmt.Sprintf(
 				"%s\n%016x",
