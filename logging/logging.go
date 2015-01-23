@@ -3,8 +3,10 @@
 package logging
 
 import (
+	"bufio"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -116,6 +118,14 @@ func (w *responseWrapper) Write(b []byte) (int, error) {
 func (w *responseWrapper) WriteHeader(status int) {
 	w.status = status
 	w.w.WriteHeader(status)
+}
+
+func (w *responseWrapper) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hijacker, ok := w.w.(http.Hijacker); ok {
+		return hijacker.Hijack()
+	} else {
+		panic("http-handlers: ResponseWriter does not implement http.Hijacker")
+	}
 }
 
 type clock func() time.Time
