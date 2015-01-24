@@ -4,6 +4,7 @@ package logging
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -124,7 +125,7 @@ func (w *responseWrapper) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if hijacker, ok := w.w.(http.Hijacker); ok {
 		return hijacker.Hijack()
 	} else {
-		panic("http-handlers: ResponseWriter does not implement http.Hijacker")
+		return nil, nil, errors.New("http-handler: wrapped responsewrapper does not implement http.Hijack")
 	}
 }
 
